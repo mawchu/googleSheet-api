@@ -1,115 +1,147 @@
 var express = require('express')
 var router = express.Router()
-var port = 5500
+var port = 5500 || ''
 const {google} = require('googleapis');
 const sheets = google.sheets('v4');
 const readAuthFile = require('../auth')
+const { actionRequest } = require('./utility/request')
 require('dotenv').config();
+/**
+ * 新增工作表 更改字體 凍結窗格使用 sheets.spreadsheets.batchUpdate
+ * 更新內容使用 sheets.spreadsheets.values.batchUpdate
+ */
 
-router.post('/updateValues', function(req, res) {
-  console.log(process.env.SPREAD_SHEET_ID)
+/**
+ * 1.新增工作表(action = addSheet) 提供sheetid 月份title
+ * 2.合併儲存格(action = mergeCells) 提供合併位置
+ * 3.字體更改(action = repeatCells) 提供合併位置
+ */
+router.post('/doSheet', function(req, res) {
   const url = `${req.protocol}://${req.hostname}:${port}${req.baseUrl}${req.path}`;
-  console.log('api路徑:', url)
-  console.log('傳送的資料:', req.body)
-  // 接傳過來的 sheet title 還有 id
+  const dataRequest = {
+    sheetTitle: req.body.datas.updateMonth,
+    sheetId: req.body.datas.newSheetId,
+    datas: req.body.datas,
+    action: req.body.action,
+    requestURL: req.headers.referer,
+    responseURL: url
+  }
+  function addSheets(auth) {
+    const request = {
+      auth: auth,
+      spreadsheetId: process.env.SPREAD_SHEET_ID,
+      resource: {
+        requests: [],
+        includeSpreadsheetInResponse: false,
+      }
+    };
+    request.resource.requests.push(actionRequest(dataRequest)[dataRequest.action]);
+    sheets.spreadsheets.batchUpdate(request)
+      .then((apiResponse) => {
+        res.send({
+          message: '呼叫 doSheet API 成功',
+          response: apiResponse.data
+        })
+      })
+      .catch((err) => {
+        console.error(err.stack);
+        throw new Error({
+          message: '呼叫 doSheet API 失敗',
+          response: err
+        })
+      })
+  }
+  readAuthFile(addSheets);
+});
+
+/* 覆蓋工作表內容
+ * 傳入指定的表格位置:
+ * 1. 第一行 => 新增工作表之後執行 
+ * 2. 其他行 => 要覆蓋原始資料
+ *  */
+router.post('/initSheetValues', function(req, res) {
+  const referer = req.headers.referer;
+  const url = `${req.protocol}://${req.hostname}:${port}${req.baseUrl}${req.path}`;
+  // 需要的參數：sheet title / sheet id / range
   const datas = {
     sheetTitle: req.body.updateMonth,
-    sheetId: req.body.newSheetId
+    sheetId: req.body.newSheetId,
+    values: req.body.values
   }
-  //從哪個網頁來的
-  const referer = req.headers.referer;
-  console.log('前端呼叫程式的網址:', referer)
-
-  function addValues(auth) {
-    // TODO: Add desired properties to the request body.
-    const updateValuesRequest = {
+  function initValues(auth) {
+    const request = {
       auth: auth,
-      // The spreadsheet to apply the updates to.
-      spreadsheetId: '19GMzzbUQpx1MZQd7K2dsmHtJmd9XeL2M3Lzb1l2yJX8', 
+      spreadsheetId: process.env.SPREAD_SHEET_ID, 
       resource: {
-        // "USER_ENTERED" 設定表單格式內容要可以套用計算公式
-        // "RAW"  設定表單格式內容不要套用計算公式，純文字
         valueInputOption: "USER_ENTERED",
         data: [
           {
-            range: '202202!A1:D5',
+            range: `${datas.sheetTitle}!A1:J3`,
             majorDimension: 'ROWS',
-            values: [
-              ["Item", "Cost", "Stocked", "Ship Date"],
-              ["Wheel", "$20.50", "4", "3/1/2016"],
-              ["Door", "$15", "2", "3/15/2016"],
-              ["Engine", "$100", "1", "3/20/2016"],
-              ["Totals", "=SUM(B2:B4)", "=SUM(C2:C4)", "=MAX(D2:D4)"]
-            ]
+            values: datas.values
           }
         ],
         includeValuesInResponse: false
       }
     };
-    sheets.spreadsheets.values.batchUpdate(updateValuesRequest)
-      .then((res) => {
-        console.log('res', res.data)
+    sheets.spreadsheets.values.batchUpdate(request)
+      .then((apiResponse) => {
+        res.send({
+          message: '呼叫 initSheetValues API 成功',
+          response: apiResponse.data
+        })
       })
       .catch((err) => {
-        console.error('err', err)
+        throw new Error({
+          message: '呼叫 initSheetValues API 失敗',
+          response: err
+        })
       })
   }
-  readAuthFile(addValues);
+  readAuthFile(initValues);
 });
 
-
-router.post('/addSheet', function(req, res) {
+/* 新增工作表內容在最後一行
+ *
+ *  */
+router.post('/appendValues', function(req, res) {
   const url = `${req.protocol}://${req.hostname}:${port}${req.baseUrl}${req.path}`;
-  // 接傳過來的 sheet title 還有 id
   console.log('api路徑:', url)
   console.log('傳送的資料:', req.body)
+  // 接傳過來的 sheet title 還有 id
   const datas = {
     sheetTitle: req.body.updateMonth,
-    sheetId: req.body.newSheetId
+    sheetId: req.body.newSheetId,
+    values: req.body.values
   }
-
   //從哪個網頁來的
   const referer = req.headers.referer;
-  console.log('前端呼叫程式的網址:', referer)
-
-  function addSheets(auth) {
+  function appendValues(auth) {
     const request = {
       auth: auth,
-      spreadsheetId: '19GMzzbUQpx1MZQd7K2dsmHtJmd9XeL2M3Lzb1l2yJX8',  // TODO: Update placeholder value.
+      spreadsheetId: process.env.SPREAD_SHEET_ID, 
+      range: `${datas.sheetTitle}!A1:E1`,
+      valueInputOption: 'USER_ENTERED',
       resource: {
-        requests: [
-          {
-            addSheet: {
-              properties: {
-                sheetId: datas.sheetId, // 不能重複需要動態產生
-                title: datas.sheetTitle, // 不能重複需要動態產生
-                sheetType: 'GRID',
-                gridProperties: {
-                  rowCount: 50,
-                  columnCount: 50,
-                  frozenRowCount: 1
-                  // frozenColumnCount: integer,
-                  // hideGridlines: boolean,
-                  // rowGroupControlAfter: boolean,
-                  // columnGroupControlAfter: boolean
-                },
-                hidden: false,
-              }
-            },
-          }
-        ],
-        includeSpreadsheetInResponse: false,
+        values: datas.values,
       }
     };
-    sheets.spreadsheets.batchUpdate(request)
-      .then((res) => {
-        console.log('res', res.data)
+
+    sheets.spreadsheets.values.append(request)
+      .then((apiResponse) => {
+        res.send({
+          message: '呼叫 appendValues API 成功',
+          response: apiResponse.data
+        })
       })
       .catch((err) => {
-        console.error('err', err)
+        throw new Error({
+          message: '呼叫 appendValues API 失敗',
+          response: err
+        })
       })
   }
-  readAuthFile(addSheets);
+  readAuthFile(appendValues);
 });
 
 module.exports = router;
