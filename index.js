@@ -2,7 +2,7 @@ const express = require('express');
 const app = express();
 const sheetRouter = require('./routes/sheetAPI')
 const loginRouter = require('./routes/login')
-const port = 5500;
+const port = parseInt(process.env.PORT) || 5500;
 
 // 記得要 bodyparser
 app.use(
@@ -20,6 +20,9 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Methods', 'GET,POST,DELETE');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested With, Content-Type, Accept');
   next();
+});
+app.get('/', (req, res) => {
+  res.send('進來了!');
 });
 app.use('/googleSheet', sheetRouter );
 app.use('/login', loginRouter );
