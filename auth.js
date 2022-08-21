@@ -42,7 +42,7 @@ function getNewToken(oAuth2Client, callback) {
 */
 function authorize(credentials, callback) {
   const {client_secret, client_id, redirect_uris} = credentials.web;
-  const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirect_uris[0]);
+  const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirect_uris[1]);
 
   // Check if we have previously stored a token.
   fs.readFile(TOKEN_PATH, (err, token) => {
